@@ -48,7 +48,7 @@
       <div class="row">
         <div>
           <span class="kicker">{sel.kind === 'cell' ? '1 km cell' : sel.scheme === 'biome' ? 'Biome' : 'Ecoregion'}</span>
-          <h1>{#await load(sel)}{title(sel)}{:then d}{d && !isCell(d) ? d.name : title(sel)}{/await}</h1>
+          <h1>{#await load(sel)}{title(sel)}{:then d}{d && !isCell(d) && !(sel.kind === 'region' && sel.name) ? d.name : title(sel)}{/await}</h1>
         </div>
         <button type="button" class="icon" aria-label="Close" onclick={() => { select(null); openTrait(null); }}>×</button>
       </div>

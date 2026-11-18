@@ -19,34 +19,47 @@
   const SCHEMES: RegionScheme[] = ['biome', 'ecoregion'];
 
   /**
-   * Olson et al. (2001) boundaries, simplified for the web, served with the
-   * site (static/regions/, absent until the data job). Each feature carries `id` and `name`. Until the files exist, a click
-   * on a region layer falls back to the data source's placeholder lookup.
+   * Olson et al. (2001) boundaries, simplified for the web and served with the
+   * site from static/regions/ (see its README). Each feature carries `id` and
+   * `name`. A file loads the first time its layer is switched on. If it is
+   * missing, a click falls back to the data source's placeholder lookup.
    */
-  async function addRegions(m: MlMap) {
-    for (const scheme of SCHEMES) {
-      const res = await fetch(asset(`/regions/${scheme}s.geojson` as Parameters<typeof asset>[0])).catch(() => null);
-      if (!res?.ok) continue;
-      m.addSource(scheme, { type: 'geojson', data: await res.json(), promoteId: 'id' });
-      m.addLayer({ id: `${scheme}-fill`, type: 'fill', source: scheme, layout: { visibility: 'none' },
-        paint: { 'fill-color': '#18181b', 'fill-opacity': ['case', ['boolean', ['feature-state', 'selected'], false], 0.25, 0.04] } });
-      m.addLayer({ id: `${scheme}-line`, type: 'line', source: scheme, layout: { visibility: 'none' },
-        paint: { 'line-color': '#18181b', 'line-width': ['case', ['boolean', ['feature-state', 'selected'], false], 2.5, 0.6] } });
-      regionsReady[scheme] = true;
+  const status: Record<RegionScheme, 'idle' | 'loading' | 'ready' | 'missing'> = { biome: 'idle', ecoregion: 'idle' };
+  let styled = $state(false);
+
+  async function addRegion(m: MlMap, scheme: RegionScheme) {
+    status[scheme] = 'loading';
+    const res = await fetch(asset(`/regions/${scheme}s.geojson` as Parameters<typeof asset>[0])).catch(() => null);
+    if (!res?.ok) {
+      status[scheme] = 'missing';
+      return;
     }
+    m.addSource(scheme, { type: 'geojson', data: await res.json(), promoteId: 'id' });
+    m.addLayer({ id: `${scheme}-fill`, type: 'fill', source: scheme, layout: { visibility: 'none' },
+      paint: { 'fill-color': '#18181b', 'fill-opacity': ['case', ['boolean', ['feature-state', 'selected'], false], 0.25, 0.04] } });
+    m.addLayer({ id: `${scheme}-line`, type: 'line', source: scheme, layout: { visibility: 'none' },
+      paint: { 'line-color': '#18181b', 'line-width': ['case', ['boolean', ['feature-state', 'selected'], false], 2.5, 0.6] } });
+    status[scheme] = 'ready';
+    regionsReady[scheme] = true;
   }
+
+  $effect(() => {
+    const layer = view.layer;
+    if (map && styled && isRegionLayer(layer) && status[layer] === 'idle') addRegion(map, layer);
+  });
 
   onMount(() => {
     setWorkerUrl(workerUrl);
     map = new MlMap({ container, style: STYLE, center: [10, 30], zoom: 1.4, attributionControl: { compact: true } });
     map.addControl(new NavigationControl({ showCompass: false }), 'top-right');
-    map.on('load', () => addRegions(map!));
+    map.on('load', () => (styled = true));
     // What a click selects follows the active layer: a region on a region
     // layer, the 1 km cell under the pointer on every other layer.
     map.on('click', (e: MapMouseEvent) => {
       const layer = view.layer;
       if (isRegionLayer(layer)) {
         let hit: { id: string; name: string } | null = null;
+        if (status[layer] === 'loading') return;
         if (regionsReady[layer]) {
           const f = map!.queryRenderedFeatures(e.point, { layers: [`${layer}-fill`] })[0];
           if (f) hit = { id: String(f.properties.id), name: String(f.properties.name) };
