@@ -13,8 +13,8 @@ export const DEFAULT_VIEW: ViewState = {
 /** The one place view state lives; components read and write it directly. */
 export const view: ViewState = $state(structuredClone(DEFAULT_VIEW));
 
-/** Set by the map once a region layer's boundary file has loaded. */
-export const regionsReady = $state({ biome: false, ecoregion: false });
+/** Transient interface state that does not belong in the URL. */
+export const ui = $state({ legendBiome: '' });
 
 /** Swap for the Zarr/JSON source once the web store exists. */
 export const source: DataSource = mockSource;

@@ -49,17 +49,6 @@ export const mockSource: DataSource = {
     const name = scheme === 'biome' && BIOMES[Number(id) - 1] ? `${BIOMES[Number(id) - 1]} (preview)` : `Preview ecoregion ${id}`;
     return { scheme, id, name, nCells: 0, areaKm2: 0, excludedShare: 0, traits };
   },
-  regionAt(scheme, lon, lat) {
-    // Crude latitude bands stand in for real boundaries; names say so.
-    if (Math.abs(lat) > 84) return null;
-    const a = Math.abs(lat);
-    if (scheme === 'biome') {
-      const i = a > 66 ? 10 : a > 50 ? 5 : a > 35 ? 3 : a > 23 ? 12 : a > 10 ? 6 : 0;
-      return { id: String(i + 1), name: `${BIOMES[i]} (preview)` };
-    }
-    const id = `${Math.floor((lon + 180) / 10)}-${Math.floor((lat + 90) / 10)}`;
-    return { id, name: `Preview ecoregion ${id}` };
-  },
   edges(traitId) {
     // Log-spaced placeholder edges; real edges come from the product.
     const s = seedOf(traitId);

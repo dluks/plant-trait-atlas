@@ -15,3 +15,25 @@ export const BIOMES = [
   'Deserts and xeric shrublands',
   'Mangroves'
 ];
+
+/**
+ * One color per biome, in BIOMES order (biome id = index + 1). Hues follow the
+ * usual ecological reading (greens forest, yellows grassland, sand desert);
+ * neighbours in hue differ in lightness so the map reads without color alone.
+ */
+export const BIOME_COLORS = [
+  '#1b7837', // tropical moist broadleaf
+  '#8fbf3f', // tropical dry broadleaf
+  '#35978f', // tropical coniferous
+  '#b8e0a8', // temperate broadleaf and mixed
+  '#01574f', // temperate conifer
+  '#8c96c6', // boreal
+  '#e6ab02', // tropical grasslands and savannas
+  '#f2e394', // temperate grasslands
+  '#4d9ad1', // flooded grasslands
+  '#a6712a', // montane grasslands
+  '#dcdcea', // tundra
+  '#d6604d', // Mediterranean
+  '#f3d9b8', // deserts
+  '#c51b7d' // mangroves
+];
