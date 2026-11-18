@@ -13,10 +13,11 @@
   import 'maplibre-gl/dist/maplibre-gl.css';
   import { onMount } from 'svelte';
   import { asset } from '$app/paths';
-  import { openTrait, select, ui, view } from '#lib/app.svelte.ts';
+  import { openTrait, pin, select, ui, unpin, view } from '#lib/app.svelte.ts';
   import { BIOME_COLORS, BIOMES } from '#lib/data/biomes.ts';
   import type { RegionScheme } from '#lib/data/source.ts';
-  import { isRegionLayer, PIN_COLORS, type Selection } from '#lib/selection.ts';
+  import { isRegionLayer, MAX_PINS, PIN_COLORS, sameSelection, type Selection } from '#lib/selection.ts';
+  import { title } from '#lib/load.ts';
 
   let container: HTMLDivElement;
   let map: MlMap | undefined = $state();
@@ -116,6 +117,12 @@
   let styled = $state(false);
   let tip = $state<{ text: string; x: number; y: number } | null>(null);
   let hoverKey = '';
+  let menu = $state<{ sel: Selection; x: number; y: number } | null>(null);
+  const menuPin = $derived(menu ? view.pins.findIndex((p) => sameSelection(p, menu!.sel)) : -1);
+
+  function closeOnKey(e: KeyboardEvent) {
+    if (e.key === 'Escape') menu = null;
+  }
 
   onMount(() => {
     setWorkerUrl(workerUrl);
@@ -134,20 +141,29 @@
 
     // What a click selects follows the active layer: a region on a region
     // layer, the 1 km cell under the pointer on every other layer.
-    m.on('click', (e: MapMouseEvent) => {
+    const hitAt = (e: MapMouseEvent): Selection | null => {
       const layer = view.layer;
       if (isRegionLayer(layer)) {
-        if (!loaded[layer]) return;
+        if (!loaded[layer]) return null;
         const f = m.queryRenderedFeatures(e.point, { layers: [`${layer}-fill`] })[0];
-        if (f) select({ kind: 'region', scheme: layer, id: String(f.properties.id), name: String(f.properties.name) });
-        else select(null);
-        return;
+        return f ? { kind: 'region', scheme: layer, id: String(f.properties.id), name: String(f.properties.name) } : null;
       }
-      const lon = Math.round(e.lngLat.lng * 1000) / 1000;
-      const lat = Math.round(e.lngLat.lat * 1000) / 1000;
-      openTrait(null);
-      select({ kind: 'cell', lon, lat });
+      return { kind: 'cell', lon: Math.round(e.lngLat.lng * 1000) / 1000, lat: Math.round(e.lngLat.lat * 1000) / 1000 };
+    };
+    m.on('click', (e: MapMouseEvent) => {
+      menu = null;
+      const hit = hitAt(e);
+      if (hit?.kind === 'cell') openTrait(null);
+      select(hit);
     });
+    // Right click opens a small menu for the thing under the pointer.
+    m.on('contextmenu', (e: MapMouseEvent) => {
+      e.originalEvent.preventDefault();
+      const hit = hitAt(e);
+      // Keep the menu inside the map near the right and bottom edges.
+      menu = hit ? { sel: hit, x: Math.min(e.point.x, container.clientWidth - 290), y: Math.min(e.point.y, container.clientHeight - 150) } : null;
+    });
+    m.on('movestart', () => (menu = null));
 
     // Hover touches the map only when the region under the pointer changes.
     const hover = (scheme: RegionScheme | null, id: string) => {
@@ -240,11 +256,39 @@
 </script>
 
 <div class="map" bind:this={container}></div>
-{#if tip}
+<svelte:window onkeydown={closeOnKey} />
+{#if menu}
+  {@const sel = menu.sel}
+  <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
+  <div class="scrim" onclick={() => (menu = null)} oncontextmenu={(e) => { e.preventDefault(); menu = null; }}></div>
+  <div class="menu" role="menu" style="left: {menu.x}px; top: {menu.y}px">
+    <div class="menu-head">
+      <span class="kicker">{sel.kind === 'cell' ? '1 km cell' : sel.scheme === 'biome' ? 'Biome' : 'Ecoregion'}</span>
+      <span class="menu-title">{title(sel)}</span>
+    </div>
+    {#if menuPin >= 0}
+      <button type="button" role="menuitem" onclick={() => { unpin(menuPin); menu = null; }}>Remove from comparison</button>
+    {:else}
+      <button type="button" role="menuitem" disabled={view.pins.length >= MAX_PINS} onclick={() => { pin(sel); menu = null; }}>
+        {view.pins.length >= MAX_PINS ? `Compare is full (${MAX_PINS})` : 'Pin to compare'}
+      </button>
+    {/if}
+    <button type="button" role="menuitem" onclick={() => { if (sel.kind === 'cell') openTrait(null); select(sel); menu = null; }}>Show distributions</button>
+  </div>
+{/if}
+{#if tip && !menu}
   <div class="tip" style="left: {tip.x + 14}px; top: {tip.y + 14}px">{tip.text}</div>
 {/if}
 
 <style>
   .map { position: absolute; inset: 0; }
+  .scrim { position: absolute; inset: 0; z-index: 4; }
+  .menu { position: absolute; z-index: 5; min-width: 200px; max-width: 280px; padding: 4px; background: #fff; border: 1px solid #d4d4d8; border-radius: 8px; box-shadow: 0 6px 20px rgb(0 0 0 / 0.12); display: flex; flex-direction: column; }
+  .menu-head { display: flex; flex-direction: column; gap: 2px; padding: 6px 10px 8px; border-bottom: 1px solid #e4e4e7; margin-bottom: 4px; }
+  .kicker { font-size: 10px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: #52525b; }
+  .menu-title { font-size: 13px; font-weight: 600; line-height: 1.3; }
+  .menu button { min-height: 34px; padding: 0 10px; border: 0; border-radius: 6px; background: none; font: inherit; font-size: 13px; text-align: left; cursor: pointer; color: #18181b; }
+  .menu button:hover:not(:disabled) { background: #f4f4f5; }
+  .menu button:disabled { color: #a1a1aa; cursor: default; }
   .tip { position: absolute; z-index: 3; pointer-events: none; max-width: 280px; padding: 6px 9px; border-radius: 6px; background: #18181b; color: #fff; font-size: 12px; line-height: 1.4; }
 </style>
