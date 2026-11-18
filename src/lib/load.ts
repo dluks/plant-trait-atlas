@@ -20,7 +20,7 @@ export function title(s: Selection): string {
     const ew = s.lon >= 0 ? 'E' : 'W';
     return `${Math.abs(s.lat).toFixed(2)}° ${ns}, ${Math.abs(s.lon).toFixed(2)}° ${ew}`;
   }
-  return s.id;
+  return s.name ?? s.id;
 }
 
 /** Two significant digits, for axis ticks in trait units. */

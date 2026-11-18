@@ -38,7 +38,7 @@
   {#if mode === 'intro'}
     <div class="body">
       <h1>Explore the distributions</h1>
-      <p>Click any 1 km cell to see the full distribution of all 37 traits. Turn on biomes or ecoregions and select one to see its mean distribution. Pin up to four selections to compare them.</p>
+      <p>Click any 1 km cell to see the full distribution of all 37 traits. Switch the map to Biomes or Ecoregions and click a region to see its mean distributions. Pin up to four selections to compare them.</p>
       <p class="note">Bars are 20 equal-width bins on each trait's transformed scale, labeled in trait units. Bar height is the share of the cell's plant community in that range.</p>
       <p class="note warn">Preview build: histograms are synthetic placeholders until the data job has run.</p>
     </div>
@@ -48,7 +48,7 @@
       <div class="row">
         <div>
           <span class="kicker">{sel.kind === 'cell' ? '1 km cell' : sel.scheme === 'biome' ? 'Biome' : 'Ecoregion'}</span>
-          <h1>{title(sel)}</h1>
+          <h1>{#await load(sel)}{title(sel)}{:then d}{d && !isCell(d) ? d.name : title(sel)}{/await}</h1>
         </div>
         <button type="button" class="icon" aria-label="Close" onclick={() => { select(null); openTrait(null); }}>×</button>
       </div>

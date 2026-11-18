@@ -4,7 +4,6 @@ import { fromQuery, toQuery, type ViewState } from './selection';
 const defaults: ViewState = {
   layer: 'pca',
   layerTrait: 'X3106',
-  overlay: 'none',
   selection: null,
   pins: [],
   openTrait: null
@@ -15,7 +14,6 @@ describe('URL state', () => {
     const v: ViewState = {
       layer: 'trait',
       layerTrait: 'X3117',
-      overlay: 'ecoregion',
       selection: { kind: 'cell', lon: 15.4, lat: 44.6 },
       pins: [
         { kind: 'cell', lon: 15.4, lat: 44.6 },
@@ -23,6 +21,11 @@ describe('URL state', () => {
       ],
       openTrait: 'X3106'
     };
+    expect(fromQuery(toQuery(v), defaults)).toEqual(v);
+  });
+
+  it('round-trips a region layer with a selected ecoregion', () => {
+    const v: ViewState = { ...defaults, layer: 'ecoregion', selection: { kind: 'region', scheme: 'ecoregion', id: '47' } };
     expect(fromQuery(toQuery(v), defaults)).toEqual(v);
   });
 

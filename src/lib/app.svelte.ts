@@ -5,7 +5,6 @@ import { MAX_PINS, sameSelection, type Selection, type ViewState } from './selec
 export const DEFAULT_VIEW: ViewState = {
   layer: 'pca',
   layerTrait: 'X3106',
-  overlay: 'none',
   selection: null,
   pins: [],
   openTrait: null
@@ -13,6 +12,9 @@ export const DEFAULT_VIEW: ViewState = {
 
 /** The one place view state lives; components read and write it directly. */
 export const view: ViewState = $state(structuredClone(DEFAULT_VIEW));
+
+/** Set by the map once a region layer's boundary file has loaded. */
+export const regionsReady = $state({ biome: false, ecoregion: false });
 
 /** Swap for the Zarr/JSON source once the web store exists. */
 export const source: DataSource = mockSource;

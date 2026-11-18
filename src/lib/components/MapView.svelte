@@ -4,8 +4,10 @@
   import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
   import 'maplibre-gl/dist/maplibre-gl.css';
   import { onMount } from 'svelte';
-  import { openTrait, select, view } from '#lib/app.svelte.ts';
-  import { PIN_COLORS, type Selection } from '#lib/selection.ts';
+  import { asset } from '$app/paths';
+  import { openTrait, regionsReady, select, source, view } from '#lib/app.svelte.ts';
+  import type { RegionScheme } from '#lib/data/source.ts';
+  import { isRegionLayer, PIN_COLORS, type Selection } from '#lib/selection.ts';
 
   let container: HTMLDivElement;
   let map: MlMap | undefined = $state();
@@ -14,18 +16,66 @@
   // PLACEHOLDER basemap: the PCA, trait, FD and AOA layers arrive as PMTiles
   // on bwSFS once the data job has run.
   const STYLE = 'https://demotiles.maplibre.org/style.json';
+  const SCHEMES: RegionScheme[] = ['biome', 'ecoregion'];
+
+  /**
+   * Olson et al. (2001) boundaries, simplified for the web, served with the
+   * site (static/regions/, absent until the data job). Each feature carries `id` and `name`. Until the files exist, a click
+   * on a region layer falls back to the data source's placeholder lookup.
+   */
+  async function addRegions(m: MlMap) {
+    for (const scheme of SCHEMES) {
+      const res = await fetch(asset(`/regions/${scheme}s.geojson` as Parameters<typeof asset>[0])).catch(() => null);
+      if (!res?.ok) continue;
+      m.addSource(scheme, { type: 'geojson', data: await res.json(), promoteId: 'id' });
+      m.addLayer({ id: `${scheme}-fill`, type: 'fill', source: scheme, layout: { visibility: 'none' },
+        paint: { 'fill-color': '#18181b', 'fill-opacity': ['case', ['boolean', ['feature-state', 'selected'], false], 0.25, 0.04] } });
+      m.addLayer({ id: `${scheme}-line`, type: 'line', source: scheme, layout: { visibility: 'none' },
+        paint: { 'line-color': '#18181b', 'line-width': ['case', ['boolean', ['feature-state', 'selected'], false], 2.5, 0.6] } });
+      regionsReady[scheme] = true;
+    }
+  }
 
   onMount(() => {
     setWorkerUrl(workerUrl);
     map = new MlMap({ container, style: STYLE, center: [10, 30], zoom: 1.4, attributionControl: { compact: true } });
     map.addControl(new NavigationControl({ showCompass: false }), 'top-right');
+    map.on('load', () => addRegions(map!));
+    // What a click selects follows the active layer: a region on a region
+    // layer, the 1 km cell under the pointer on every other layer.
     map.on('click', (e: MapMouseEvent) => {
+      const layer = view.layer;
+      if (isRegionLayer(layer)) {
+        let hit: { id: string; name: string } | null = null;
+        if (regionsReady[layer]) {
+          const f = map!.queryRenderedFeatures(e.point, { layers: [`${layer}-fill`] })[0];
+          if (f) hit = { id: String(f.properties.id), name: String(f.properties.name) };
+        } else hit = source.regionAt(layer, e.lngLat.lng, e.lngLat.lat);
+        if (hit) select({ kind: 'region', scheme: layer, ...hit });
+        return;
+      }
       const lon = Math.round(e.lngLat.lng * 1000) / 1000;
       const lat = Math.round(e.lngLat.lat * 1000) / 1000;
       openTrait(null);
       select({ kind: 'cell', lon, lat });
     });
     return () => map?.remove();
+  });
+
+  // Show only the active region layer, and outline the selected and pinned regions.
+  let lit: { source: string; id: string }[] = [];
+  $effect(() => {
+    const m = map;
+    const layer = view.layer;
+    const regions = [...view.pins, view.selection].filter((s): s is Selection & { kind: 'region' } => s?.kind === 'region');
+    if (!m) return;
+    for (const scheme of SCHEMES) {
+      if (!regionsReady[scheme]) continue;
+      for (const part of ['fill', 'line']) m.setLayoutProperty(`${scheme}-${part}`, 'visibility', layer === scheme ? 'visible' : 'none');
+    }
+    lit.forEach((f) => m.getSource(f.source) && m.setFeatureState(f, { selected: false }));
+    lit = regions.filter((r) => regionsReady[r.scheme]).map((r) => ({ source: r.scheme, id: r.id }));
+    lit.forEach((f) => m.setFeatureState(f, { selected: true }));
   });
 
   function dot(color: string, label: string) {

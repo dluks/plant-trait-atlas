@@ -32,6 +32,8 @@ export interface RegionResult {
 export interface DataSource {
   cell(lon: number, lat: number): Promise<CellResult | null>;
   region(scheme: RegionScheme, id: string): Promise<RegionResult | null>;
+  /** Which region contains a point. Only used while boundary files are absent. */
+  regionAt(scheme: RegionScheme, lon: number, lat: number): { id: string; name: string } | null;
   /** bin edges in trait units, 21 per trait */
   edges(traitId: string): number[];
   /** the global mean histogram, for the reference outline */

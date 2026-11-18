@@ -2,15 +2,20 @@ import type { RegionScheme } from './data/source';
 
 export type Selection =
   | { kind: 'cell'; lon: number; lat: number }
-  | { kind: 'region'; scheme: RegionScheme; id: string };
+  | { kind: 'region'; scheme: RegionScheme; id: string; name?: string };
 
-export type Layer = 'pca' | 'trait' | 'raoq' | 'fdis' | 'aoa';
-export type Overlay = 'none' | RegionScheme;
+/**
+ * One list of map layers. The active layer also decides what a click selects:
+ * on a region layer (biomes, ecoregions) it selects that region, on any other
+ * layer it selects the 1 km cell.
+ */
+export type Layer = 'pca' | 'trait' | 'raoq' | 'fdis' | 'aoa' | RegionScheme;
+
+export const isRegionLayer = (l: Layer): l is RegionScheme => l === 'biome' || l === 'ecoregion';
 
 export interface ViewState {
   layer: Layer;
   layerTrait: string;
-  overlay: Overlay;
   selection: Selection | null;
   pins: Selection[];
   openTrait: string | null;
@@ -42,7 +47,6 @@ function decSel(v: string): Selection | null {
 export function toQuery(v: ViewState): string {
   const q = new URLSearchParams();
   if (v.layer !== 'pca') q.set('layer', v.layer === 'trait' ? `trait:${v.layerTrait}` : v.layer);
-  if (v.overlay !== 'none') q.set('regions', v.overlay);
   if (v.selection) q.set('sel', encSel(v.selection));
   if (v.pins.length) q.set('pins', v.pins.map(encSel).join(';'));
   if (v.openTrait) q.set('trait', v.openTrait);
@@ -56,9 +60,7 @@ export function fromQuery(query: string, defaults: ViewState): ViewState {
   if (layer?.startsWith('trait:')) {
     v.layer = 'trait';
     v.layerTrait = layer.slice(6);
-  } else if (layer === 'raoq' || layer === 'fdis' || layer === 'aoa' || layer === 'pca') v.layer = layer;
-  const regions = q.get('regions');
-  if (regions === 'biome' || regions === 'ecoregion') v.overlay = regions;
+  } else if (layer && ['pca', 'raoq', 'fdis', 'aoa', 'biome', 'ecoregion'].includes(layer)) v.layer = layer as Layer;
   const sel = q.get('sel');
   v.selection = sel ? decSel(sel) : null;
   v.pins = (q.get('pins') ?? '')
