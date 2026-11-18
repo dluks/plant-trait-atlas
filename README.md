@@ -28,12 +28,27 @@ npm run build      # static site in build/
 Pushing to `main` builds and deploys to Pages (`.github/workflows/deploy.yml`);
 set Settings → Pages → Source to "GitHub Actions" once.
 
+## Data
+
+The explorer reads the web store written by the `web_atlas_10km` stage of
+trait-distributions (`pipeline/products/web_atlas_10km`) from object storage:
+`meta.json`, `global.json`, `regions/<biome|ecoregion>/<id>.json` and the Zarr
+v3 store `cells.zarr` (read with zarrita over HTTP range requests). Its base URL
+comes from `VITE_DATA_URL` at build time; the deploy workflow takes it from the
+repository variable `DATA_URL`. Without it the site runs on synthetic
+histograms.
+
+`test/fixtures/atlas/` is a synthetic store in the same layout
+(`scripts/make_test_store.py`, needs `zarr>=3`), which the tests serve over
+HTTP. Region boundaries live in `static/regions/` (see its README).
+
 ## Layout
 
-- `src/lib/data/grid.ts`: lon/lat to EPSG:6933 and the 1 km cell index, tested
+- `src/lib/data/grid.ts`: lon/lat to EPSG:6933 and the cell index, tested
   against PROJ.
 - `src/lib/data/source.ts`: the `DataSource` interface (cell, region, bin edges,
-  global reference). `mock.ts` implements it with synthetic data.
+  units, global reference). `atlas.ts` reads the web store; `mock.ts` is the
+  synthetic preview.
 - `src/lib/selection.ts`: view state and its URL encoding (shareable links).
 - `src/routes/+page.svelte`: the paper page. `src/routes/explore/`: the explorer.
 - `src/lib/components/`: map, layer control, side panel, trait grid, histogram.

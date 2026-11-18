@@ -7,8 +7,10 @@ export interface CellResult {
   lat: number;
   row: number;
   col: number;
-  /** inside the broad AOA (TRY traits) and the hydraulic AOA */
-  inAoa: { broad: boolean; hydraulic: boolean };
+  /** percent (0-100) of the cell's 1 km cells inside the broad AOA (TRY traits) and the hydraulic AOA */
+  aoa: { broad: number; hydraulic: number };
+  /** the Olson ecoregion covering most of the cell */
+  ecoregion?: { id: string; name: string };
   traits: Record<string, TraitBins>;
 }
 
@@ -19,8 +21,9 @@ export interface RegionResult {
   biome?: string;
   nCells: number;
   areaKm2: number;
-  /** share of the region outside the AOA, excluded from the mean */
-  excludedShare: number;
+  /** share of the region's cells outside the broad and the hydraulic AOA, excluded from the means */
+  excludedShare: { broad: number; hydraulic: number };
+  /** a trait is absent when none of the region's cells lies inside its AOA */
   traits: Record<string, RegionBins>;
 }
 
@@ -30,10 +33,18 @@ export interface RegionResult {
  * spatially chunked Zarr on bwSFS (cells) and JSON on Pages (regions).
  */
 export interface DataSource {
+  /** what one clickable cell is, for labels ("10 km cell") */
+  cellLabel: string;
+  /** true for the synthetic preview source */
+  preview: boolean;
+  /** resolves once metadata (units, bin edges, the global mean) is loaded; call before edges/global/unit */
+  ready: Promise<void>;
   cell(lon: number, lat: number): Promise<CellResult | null>;
   region(scheme: RegionScheme, id: string): Promise<RegionResult | null>;
   /** bin edges in trait units, 21 per trait */
   edges(traitId: string): number[];
   /** the global mean histogram, for the reference outline */
   global(traitId: string): number[];
+  /** the trait's units */
+  unit(traitId: string): string;
 }

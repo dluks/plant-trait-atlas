@@ -10,7 +10,11 @@ const key = (s: Selection) => (s.kind === 'cell' ? `c:${s.lon},${s.lat}` : `${s.
 /** Fetch a selection's histograms once; later calls reuse the same promise. */
 export function load(s: Selection): Promise<Loaded | null> {
   const k = key(s);
-  if (!cache.has(k)) cache.set(k, s.kind === 'cell' ? source.cell(s.lon, s.lat) : source.region(s.scheme, s.id));
+  if (!cache.has(k))
+    cache.set(
+      k,
+      source.ready.then((): Promise<Loaded | null> => (s.kind === 'cell' ? source.cell(s.lon, s.lat) : source.region(s.scheme, s.id)))
+    );
   return cache.get(k)!;
 }
 

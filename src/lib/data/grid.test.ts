@@ -26,10 +26,11 @@ describe('EPSG:6933 forward projection', () => {
 });
 
 describe('cellIndex', () => {
-  const grid = { x0: -17367530.45, y0: 7314540.83, cellSize: 1000.89502334956, width: 34704, height: 14616 };
+  // The web store's 10 km grid: 10 by 10 blocks of the product's native cells.
+  const grid = { x0: -17367530.445, y0: 7342230.205, px: 10000.305, py: 10001.676, width: 3474, height: 1469 };
 
   it('puts the equator and prime meridian at the grid centre', () => {
-    expect(cellIndex(grid, 0.0001, 0.0001)).toEqual({ row: 7307, col: 17352 });
+    expect(cellIndex(grid, 0.0001, 0.0001)).toEqual({ row: 734, col: 1736 });
   });
 
   it('returns null off the grid', () => {

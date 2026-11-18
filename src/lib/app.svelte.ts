@@ -1,3 +1,4 @@
+import { atlasSource } from './data/atlas';
 import { mockSource } from './data/mock';
 import type { DataSource } from './data/source';
 import { MAX_PINS, sameSelection, type Selection, type ViewState } from './selection';
@@ -16,8 +17,12 @@ export const view: ViewState = $state(structuredClone(DEFAULT_VIEW));
 /** Transient interface state that does not belong in the URL. */
 export const ui = $state({ legendBiome: '' });
 
-/** Swap for the Zarr/JSON source once the web store exists. */
-export const source: DataSource = mockSource;
+/**
+ * The web store's base URL is set at build time (VITE_DATA_URL); without it
+ * the site runs on synthetic histograms so the interface can be reviewed.
+ */
+const DATA_URL = import.meta.env.VITE_DATA_URL as string | undefined;
+export const source: DataSource = DATA_URL ? atlasSource(DATA_URL) : mockSource;
 
 export function select(sel: Selection | null) {
   view.selection = sel;

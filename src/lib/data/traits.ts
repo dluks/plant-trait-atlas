@@ -1,7 +1,8 @@
 /**
- * Trait list and grouping for the panel. PLACEHOLDER: names, units and groups
- * are provisional and will be read from the product's metadata (trait ids,
- * bin edges in both scales) once the web store exists.
+ * The 37 traits of the lead arm (31 TRY traits and 6 hydraulic traits),
+ * grouped for the panel. Ids are those of the web store's meta.json; the data
+ * source supplies the authoritative units and bin edges, so the units here are
+ * only a fallback for the preview build.
  */
 export interface Trait {
   id: string;
@@ -30,13 +31,14 @@ export const TRAITS: Trait[] = [
     ['X14', 'Leaf N (mass)', 'mg g⁻¹'],
     ['X50', 'Leaf N (area)', 'g m⁻²'],
     ['X15', 'Leaf P', 'mg g⁻¹'],
+    ['X13', 'Leaf C', 'mg g⁻¹'],
     ['X146', 'Leaf C/N', 'g g⁻¹'],
     ['X78', 'Leaf δ¹⁵N', '‰'],
     ['X46', 'Leaf thickness', 'mm'],
     ['X3120', 'Leaf water content', 'g g⁻¹']
   ]),
   ...g('Leaf size', [
-    ['X3113', 'Leaf area', 'mm²'],
+    ['X3114', 'Leaf area', 'mm²'],
     ['X144', 'Leaf length', 'mm'],
     ['X145', 'Leaf width', 'mm'],
     ['X55', 'Leaf dry mass', 'mg'],
@@ -49,12 +51,11 @@ export const TRAITS: Trait[] = [
     ['X237', 'Dispersal unit length', 'mm'],
     ['X95', 'Germination rate', '%']
   ]),
-  ...g('Wood, roots and genome', [
+  ...g('Wood and roots', [
     ['X289', 'Wood fiber length', 'µm'],
     ['X297', 'Wood ray density', 'mm⁻¹'],
-    ['X1080', 'Specific root length', 'm g⁻¹'],
-    ['X223', 'Chromosome number', ''],
-    ['X224', 'Genome size', 'pg']
+    ['X614', 'Specific fine root length', 'm g⁻¹'],
+    ['X1080', 'Specific root length', 'm g⁻¹']
   ]),
   ...g(
     'Hydraulics (woody plants only)',

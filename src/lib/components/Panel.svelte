@@ -8,7 +8,12 @@
   import Histogram from './Histogram.svelte';
   import TraitGrid from './TraitGrid.svelte';
 
-  const isCell = (d: Loaded): d is CellResult => 'inAoa' in d;
+  const isCell = (d: Loaded): d is CellResult => 'aoa' in d;
+  const pct = (v: number) => `${Math.round(v * 100)}%`;
+  const num = (v: number) => Math.round(v).toLocaleString('en-US');
+  // A cell's AOA badge: fully inside, partly (share of its 1 km cells), or outside.
+  const aoaText = (share: number, what: string) =>
+    share >= 100 ? `Inside AOA, ${what}` : share <= 0 ? `Outside AOA, ${what}` : `${share}% inside AOA, ${what}`;
 
   // The panel shows one of: intro, a selection (grid or one trait), or the compare view.
   const mode = $derived(view.selection ? 'selection' : view.pins.length ? 'compare' : 'intro');
@@ -16,6 +21,7 @@
 
   function single(d: Loaded, id: string) {
     const t = d.traits[id];
+    if (!t) return [];
     const band = 'p05' in t ? { lo: t.p05 as number[], hi: t.p95 as number[] } : undefined;
     return [{ p: t.p, color: '#52525b', band }];
   }
@@ -25,7 +31,7 @@
     Promise.all(view.pins.map(load)).then((d) => (pinData = d));
   });
   const overlay = (id: string) =>
-    pinData.flatMap((d, i) => (d ? [{ p: d.traits[id].p, color: PIN_COLORS[i] }] : []));
+    pinData.flatMap((d, i) => (d?.traits[id] ? [{ p: d.traits[id].p, color: PIN_COLORS[i] }] : []));
 
   const trait = $derived(TRAITS.find((t) => t.id === view.openTrait));
   const ticks = (id: string) => {
@@ -38,29 +44,37 @@
   {#if mode === 'intro'}
     <div class="body">
       <h1>Explore the distributions</h1>
-      <p>Click any 1 km cell to see the full distribution of all 37 traits. Switch the map to Biomes or Ecoregions and click a region to see its mean distributions. Pin up to four selections to compare them.</p>
+      <p>Click any {source.cellLabel} to see the full distribution of all 37 traits. Switch the map to Biomes or Ecoregions and click a region to see its mean distributions. Pin up to four selections to compare them.</p>
       <p class="note">Bars are 20 equal-width bins on each trait's transformed scale, labeled in trait units. Bar height is the share of the cell's plant community in that range.</p>
-      <p class="note warn">Preview build: histograms are synthetic placeholders until the data job has run.</p>
+      {#if source.preview}<p class="note warn">Preview build: histograms are synthetic placeholders until the data job has run.</p>{/if}
     </div>
   {:else if mode === 'selection' && view.selection}
     {@const sel = view.selection}
     <div class="head">
       <div class="row">
         <div>
-          <span class="kicker">{sel.kind === 'cell' ? '1 km cell' : sel.scheme === 'biome' ? 'Biome' : 'Ecoregion'}</span>
+          <span class="kicker">{sel.kind === 'cell' ? source.cellLabel : sel.scheme === 'biome' ? 'Biome' : 'Ecoregion'}</span>
           <h1>{#await load(sel)}{title(sel)}{:then d}{d && !isCell(d) && !(sel.kind === 'region' && sel.name) ? d.name : title(sel)}{/await}</h1>
         </div>
         <button type="button" class="icon" aria-label="Close" onclick={() => { select(null); openTrait(null); }}>×</button>
       </div>
       {#await load(sel) then d}
         {#if d && isCell(d)}
+          {#if d.ecoregion}<p class="note">{d.ecoregion.name}</p>{/if}
           <div class="badges">
-            <span class:out={!d.inAoa.broad}>{d.inAoa.broad ? 'Inside' : 'Outside'} AOA, TRY traits</span>
-            <span class:out={!d.inAoa.hydraulic}>{d.inAoa.hydraulic ? 'Inside' : 'Outside'} AOA, hydraulic traits</span>
+            <span class:out={d.aoa.broad < 100}>{aoaText(d.aoa.broad, 'TRY traits')}</span>
+            <span class:out={d.aoa.hydraulic < 100}>{aoaText(d.aoa.hydraulic, 'hydraulic traits')}</span>
           </div>
         {:else if d}
           {@const r = d as RegionResult}
-          <p class="note">Mean of {r.nCells || '[n]'} cells ({r.areaKm2 || '[area]'} km²). Cells outside the AOA are excluded.</p>
+          {#if source.preview}
+            <p class="note">Mean of the region's 1 km cells inside the AOA.</p>
+          {:else}
+            <p class="note">
+              Mean of the region's 1 km cells inside the AOA: {num(r.nCells)} cells, {num(r.areaKm2)} km². Excluded as outside the AOA:
+              {pct(r.excludedShare.broad)} for TRY traits, {pct(r.excludedShare.hydraulic)} for hydraulic traits. Shading spans the 5th to 95th percentile across cells.
+            </p>
+          {/if}
         {/if}
       {/await}
       <div class="actions">
@@ -80,16 +94,21 @@
           <p class="note">No data here (ocean or outside the grid).</p>
         {:else if trait}
           <button type="button" class="link" onclick={() => openTrait(null)}>‹ All 37 traits</button>
-          <h2 class="trait-name">{trait.name}{trait.unit ? ` (${trait.unit})` : ''}</h2>
+          {@const unit = source.unit(trait.id)}
+          <h2 class="trait-name">{trait.name}{unit ? ` (${unit})` : ''}</h2>
+          {#if !d.traits[trait.id]}
+            <p class="note">None of this region's cells lies inside the AOA for this trait.</p>
+          {:else}
           <Histogram series={single(d, trait.id)} reference={source.global(trait.id)} width={412} height={240} ticks={ticks(trait.id)} label="Histogram of {trait.name}" />
           <p class="note">Dashed: global distribution. Bins are equal width on the transformed scale, so tick spacing in trait units is uneven.</p>
           {@const s = summarise(d.traits[trait.id].p, source.edges(trait.id))}
           <table>
             <tbody>
-              <tr><td>Mean</td><td>{fmt(s.mean)} {trait.unit}</td></tr>
-              <tr><td>5th to 95th percentile</td><td>{fmt(s.p05)} to {fmt(s.p95)} {trait.unit}</td></tr>
+              <tr><td>Mean</td><td>{fmt(s.mean)} {unit}</td></tr>
+              <tr><td>5th to 95th percentile</td><td>{fmt(s.p05)} to {fmt(s.p95)} {unit}</td></tr>
             </tbody>
           </table>
+          {/if}
         {:else}
           <TraitGrid seriesFor={(id) => single(d, id)} onopen={openTrait} />
         {/if}

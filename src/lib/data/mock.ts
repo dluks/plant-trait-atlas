@@ -25,6 +25,10 @@ function hist(seed: number, spread = 1): number[] {
 const seedOf = (s: string) => [...s].reduce((a, c) => (a * 31 + c.charCodeAt(0)) % 100003, 7);
 
 export const mockSource: DataSource = {
+  cellLabel: '1 km cell',
+  preview: true,
+  ready: Promise.resolve(),
+  unit: (id) => TRAITS.find((t) => t.id === id)?.unit ?? '',
   async cell(lon, lat) {
     if (Math.abs(lat) > 84) return null;
     const base = Math.round(lon * 10) * 1000 + Math.round(lat * 10);
@@ -35,7 +39,7 @@ export const mockSource: DataSource = {
       lat,
       row: 0,
       col: 0,
-      inAoa: { broad: rnd(base) > 0.08, hydraulic: rnd(base + 5) > 0.3 },
+      aoa: { broad: rnd(base) > 0.08 ? 100 : 0, hydraulic: rnd(base + 5) > 0.3 ? 100 : 0 },
       traits
     };
   },
@@ -47,7 +51,7 @@ export const mockSource: DataSource = {
       traits[t.id] = { p, p05: p.map((x) => x * 0.45), p95: p.map((x) => x * 1.7 + 0.004) };
     });
     const name = scheme === 'biome' && BIOMES[Number(id) - 1] ? `${BIOMES[Number(id) - 1]} (preview)` : `Preview ecoregion ${id}`;
-    return { scheme, id, name, nCells: 0, areaKm2: 0, excludedShare: 0, traits };
+    return { scheme, id, name, nCells: 0, areaKm2: 0, excludedShare: { broad: 0, hydraulic: 0 }, traits };
   },
   edges(traitId) {
     // Log-spaced placeholder edges; real edges come from the product.

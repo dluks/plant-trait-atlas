@@ -29,6 +29,8 @@ jobs:
       - run: npm run build
         env:
           BASE_PATH: /${{ github.event.repository.name }}
+          # Base URL of the web store on object storage (repository variable). Unset: synthetic preview data.
+          VITE_DATA_URL: ${{ vars.DATA_URL }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: build
