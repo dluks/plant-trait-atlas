@@ -1,8 +1,10 @@
-# Plant trait distribution viewer
+# Plant trait atlas
 
-Static web viewer for the global 1 km plant trait distribution maps (20-bin
-histograms of 37 traits per cell). Research in preparation; the data are under
-embargo until publication.
+Website for the paper "Beyond the mean: a global atlas of plant trait
+distributions": the paper page at `/` and an interactive explorer of the global
+1 km trait distribution maps (20-bin histograms of 37 traits per cell) at
+`/explore/`. Research in preparation; the data are under embargo until
+publication.
 
 - **Stack:** SvelteKit 3 (static adapter), Svelte 5, MapLibre GL JS.
 - **Hosting:** GitHub Pages for the app and small files (region histograms,
@@ -17,7 +19,7 @@ embargo until publication.
 
 ```sh
 npm install
-npm run dev        # http://localhost:5173
+npm run dev        # http://localhost:5173 (explorer at /explore/)
 npm test           # projection, histogram and URL-state tests
 npm run check      # svelte-check
 npm run build      # static site in build/
@@ -33,4 +35,5 @@ set Settings → Pages → Source to "GitHub Actions" once.
 - `src/lib/data/source.ts`: the `DataSource` interface (cell, region, bin edges,
   global reference). `mock.ts` implements it with synthetic data.
 - `src/lib/selection.ts`: view state and its URL encoding (shareable links).
+- `src/routes/+page.svelte`: the paper page. `src/routes/explore/`: the explorer.
 - `src/lib/components/`: map, layer control, side panel, trait grid, histogram.
