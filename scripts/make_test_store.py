@@ -1,11 +1,12 @@
 """Write a small synthetic web store in the exact layout of the
 `web_atlas_10km` stage (trait-distributions), for the explorer's tests.
 
-    python scripts/make_test_store.py test/fixtures/atlas
+    python scripts/make_test_store.py test/fixtures/atlas   # needs zarr>=3, pmtiles, pillow
 
 Same array names, shapes, dtypes and codecs as the real cells.zarr (sharding
 64 x 64, inner 8 x 8, bytes + zstd, index without checksum), but only the cells
-around 50° N, 10° E hold data, and every value is synthetic.
+around 50° N, 10° E hold data, and every value is synthetic. Also writes two
+one-tile PMTiles layers and a tiles.json in the format of `web_atlas_tiles`.
 """
 
 import json
@@ -67,5 +68,38 @@ def main(out: str) -> None:
     (root / "global.json").write_text(json.dumps(region("global", "All land")))
 
 
+def tiles(out: str) -> None:
+    """Two tiny PMTiles layers (z0 only) and a tiles.json in the stage's format."""
+    import io
+
+    from PIL import Image
+    from pmtiles.tile import Compression, TileType, zxy_to_tileid
+    from pmtiles.writer import Writer
+
+    root = Path(out) / "tiles"
+    root.mkdir(parents=True, exist_ok=True)
+    layers = []
+    for lid, color in [("pca", (89, 199, 199)), ("trait_X3106", (33, 145, 140))]:
+        buf = io.BytesIO()
+        Image.new("RGBA", (256, 256), (*color, 255)).save(buf, "WEBP", quality=90)
+        with open(root / f"{lid}.pmtiles", "wb") as f:
+            w = Writer(f)
+            w.write_tile(zxy_to_tileid(0, 0, 0), buf.getvalue())
+            w.finalize({"tile_type": TileType.WEBP, "tile_compression": Compression.NONE, "min_zoom": 0, "max_zoom": 0,
+                        "min_lon_e7": -1800000000, "min_lat_e7": -850000000, "max_lon_e7": 1800000000,
+                        "max_lat_e7": 850000000, "center_zoom": 0, "center_lon_e7": 0, "center_lat_e7": 0}, {})
+        layers.append({"id": lid, "file": f"{lid}.pmtiles"})
+    Image.new("RGB", (256, 256), (200, 200, 200)).save(root / "pca_key.png")
+    layers[0].update(type="bivariate", x_axis={"pc": 1, "name": "Plant size"}, y_axis={"pc": 2, "name": "Cold-dry tolerance"},
+                     mask="aoa_hydraulic", key="pca_key.png")
+    layers[1].update(type="continuous", trait="X3106", units="m", colors=["#440154", "#21918c", "#fde725"],
+                     ticks=[{"value": 0, "label": "0.5"}, {"value": 1, "label": "30"}], vmin=0, vmax=1)
+    layers.append({"id": "aoa", "type": "categorical", "file": "aoa.pmtiles",
+                   "classes": [{"code": 1, "label": "Inside both AOAs", "color": "#cfe8cf"},
+                               {"code": 4, "label": "Outside both AOAs", "color": "#4d4d4d"}]})
+    (root / "tiles.json").write_text(json.dumps({"format": {"max_zoom": 0}, "layers": layers}))
+
+
 if __name__ == "__main__":
     main(sys.argv[1])
+    tiles(sys.argv[1])

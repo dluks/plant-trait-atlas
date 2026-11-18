@@ -1,5 +1,6 @@
 import { atlasSource } from './data/atlas';
 import { mockSource } from './data/mock';
+import { loadTiles, type TilesIndex } from './data/tiles';
 import type { DataSource } from './data/source';
 import { MAX_PINS, sameSelection, type Selection, type ViewState } from './selection';
 
@@ -21,8 +22,12 @@ export const ui = $state({ legendBiome: '' });
  * The web store's base URL is set at build time (VITE_DATA_URL); without it
  * the site runs on synthetic histograms so the interface can be reviewed.
  */
-const DATA_URL = import.meta.env.VITE_DATA_URL as string | undefined;
+export const DATA_URL = (import.meta.env.VITE_DATA_URL as string | undefined)?.replace(/\/$/, '');
 export const source: DataSource = DATA_URL ? atlasSource(DATA_URL) : mockSource;
+
+/** tiles.json of the map layers, once loaded (stays null on the preview build). */
+export const tiles = $state<{ index: TilesIndex | null }>({ index: null });
+if (DATA_URL) loadTiles(DATA_URL).then((t) => (tiles.index = t));
 
 export function select(sel: Selection | null) {
   view.selection = sel;

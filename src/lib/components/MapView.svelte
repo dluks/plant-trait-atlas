@@ -1,5 +1,6 @@
 <script lang="ts">
   import {
+    addProtocol,
     Map as MlMap,
     Marker,
     NavigationControl,
@@ -13,7 +14,9 @@
   import 'maplibre-gl/dist/maplibre-gl.css';
   import { onMount } from 'svelte';
   import { asset } from '$app/paths';
-  import { openTrait, pin, select, ui, unpin, view } from '#lib/app.svelte.ts';
+  import { Protocol } from 'pmtiles';
+  import { DATA_URL, openTrait, pin, select, tiles, ui, unpin, view } from '#lib/app.svelte.ts';
+  import { tileLayerId } from '#lib/data/tiles.ts';
   import { BIOME_COLORS, BIOMES } from '#lib/data/biomes.ts';
   import type { RegionScheme } from '#lib/data/source.ts';
   import { isRegionLayer, MAX_PINS, PIN_COLORS, sameSelection, type Selection } from '#lib/selection.ts';
@@ -126,6 +129,8 @@
 
   onMount(() => {
     setWorkerUrl(workerUrl);
+    // Map layers are PMTiles archives read with range requests from the web store.
+    if (DATA_URL) addProtocol('pmtiles', new Protocol().tile);
     const m = new MlMap({ container, style: STYLE, center: [10, 25], zoom: 1.4, attributionControl: { compact: true } });
     map = m;
     m.addControl(new NavigationControl({ showCompass: false }), 'top-right');
@@ -133,7 +138,7 @@
       // Land under the data layers until their tiles exist: the biome shapes in one gray.
       loadScheme(m, 'biome').then(() => {
         if (!m.getSource('biome')) return;
-        m.addLayer({ id: 'land', type: 'fill', source: 'biome', paint: { 'fill-color': '#d4d4d8' } }, 'biome-fill');
+        m.addLayer({ id: 'land', type: 'fill', source: 'biome', paint: { 'fill-color': '#d4d4d8' } }, m.getLayer('data') ? 'data' : 'biome-fill');
         m.setLayoutProperty('land', 'visibility', isRegionLayer(view.layer) ? 'none' : 'visible');
       });
       styled = true;
@@ -218,6 +223,33 @@
     if (legend && layer === 'biome') mark(m, 'legend', 'biome', [legend]);
     else if (legend && layer === 'ecoregion' && loaded.ecoregion) mark(m, 'legend', 'ecoregion', byBiome[legend] ?? []);
     else mark(m, 'legend', '', []);
+  });
+
+  // The data layer (PCA, a trait mean, Rao's Q, FDis, AOA) under the region
+  // layers; one raster source at a time, swapped when the layer changes.
+  let shownTile = '';
+  $effect(() => {
+    const m = map;
+    const entry = tiles.index?.layers.find((l) => l.id === tileLayerId(view.layer, view.layerTrait));
+    if (!m || !styled || !DATA_URL) return;
+    const want = entry?.id ?? '';
+    if (want === shownTile) return;
+    if (shownTile) {
+      m.removeLayer('data');
+      m.removeSource('data');
+    }
+    shownTile = want;
+    if (!entry) return;
+    m.addSource('data', {
+      type: 'raster',
+      url: `pmtiles://${DATA_URL}/tiles/${entry.file}`,
+      tileSize: 256,
+      attribution: 'Trait maps: Lusk et al., in preparation'
+    });
+    m.addLayer(
+      { id: 'data', type: 'raster', source: 'data', paint: { 'raster-resampling': 'nearest', 'raster-fade-duration': 0 } },
+      m.getLayer('biome-fill') ? 'biome-fill' : undefined
+    );
   });
 
   // Pinned regions keep an outline in their pin color.

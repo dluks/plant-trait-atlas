@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { select, ui, view } from '#lib/app.svelte.ts';
+  import { DATA_URL, select, source, tiles, ui, view } from '#lib/app.svelte.ts';
+  import { tileLayerId } from '#lib/data/tiles.ts';
   import { BIOME_COLORS, BIOMES } from '#lib/data/biomes.ts';
   import { TRAITS } from '#lib/data/traits.ts';
   import { isRegionLayer, type Layer } from '#lib/selection.ts';
@@ -18,6 +19,12 @@
     void view.layer;
     ui.legendBiome = '';
   });
+
+  // The legend of the active data layer, from tiles.json (absent on the preview build).
+  const legend = $derived(tiles.index?.layers.find((l) => l.id === tileLayerId(view.layer, view.layerTrait)));
+  const gradient = (colors: string[]) => `linear-gradient(to right, ${colors.join(', ')})`;
+  const maskNote = (mask?: string) =>
+    mask?.startsWith('aoa_hydraulic') ? 'outside the hydraulic AOA' : mask?.startsWith('aoa') ? 'outside the AOA' : 'no value';
 
   const REGIONS: [Layer, string][] = [
     ['biome', 'Biomes'],
@@ -64,6 +71,31 @@
         </li>
       {/each}
     </ul>
+  {:else if legend?.type === 'bivariate'}
+    <div class="legend">
+      <div class="keywrap">
+        <img class="pcakey" src="{DATA_URL}/tiles/{legend.key}" alt="" width="64" height="64" />
+      </div>
+      <div class="note">→ PC{legend.x_axis.pc} {legend.x_axis.name.toLowerCase()}<br />↑ PC{legend.y_axis.pc} {legend.y_axis.name.toLowerCase()}<br /><span class="gray"></span> {maskNote(legend.mask)}</div>
+    </div>
+  {:else if legend?.type === 'continuous'}
+    {@const unit = legend.trait ? source.unit(legend.trait) : (legend.units ?? '')}
+    <div class="bar">
+      <div class="ramp" style="background: {gradient(legend.colors)}"></div>
+      <div class="ticks">
+        {#each legend.ticks as t (t.value)}
+          {@const at = ((t.value - legend.vmin) / (legend.vmax - legend.vmin)) * 100}
+          <span style="left: {at}%; transform: translateX({at <= 0 ? 0 : at >= 100 ? -100 : -50}%)">{t.label}</span>
+        {/each}
+      </div>
+      <p class="note">{legend.trait ? 'Mean of each cell\'s distribution' : legend.title}{unit ? `, ${unit}` : ''}. <span class="gray"></span> {maskNote(legend.mask)}</p>
+    </div>
+  {:else if legend?.type === 'categorical'}
+    <ul class="classes">
+      {#each legend.classes as c (c.code)}
+        <li><span class="sw" style="background: {c.color}"></span>{c.label}</li>
+      {/each}
+    </ul>
   {:else if view.layer === 'pca'}
     <div class="legend">
       <div class="key" aria-hidden="true">
@@ -90,6 +122,14 @@
   .sw { flex-shrink: 0; width: 12px; height: 12px; border-radius: 2px; }
   .legend { display: flex; gap: 12px; align-items: center; }
   .key { display: grid; grid-template-columns: repeat(3, 16px); grid-template-rows: repeat(3, 16px); }
+  .keywrap { flex-shrink: 0; }
+  .pcakey { display: block; width: 64px; height: 64px; image-rendering: auto; }
+  .bar { display: flex; flex-direction: column; gap: 4px; }
+  .ramp { height: 12px; border-radius: 2px; }
+  .ticks { position: relative; height: 16px; font-size: 11px; color: #3f3f46; }
+  .ticks span { position: absolute; white-space: nowrap; }
+  .classes { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #3f3f46; }
+  .classes li { display: flex; align-items: center; gap: 8px; }
   .gray { display: inline-block; width: 10px; height: 10px; background: #bdbdbd; }
   @media (max-width: 760px) { .card { width: auto; right: 64px; } }
 </style>
