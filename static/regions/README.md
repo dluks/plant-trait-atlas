@@ -40,3 +40,12 @@ shrublands, 14 Mangroves.
 
 These are display boundaries for the site. They are too coarse for zonal
 statistics; use the full-resolution TEOW layer for analysis.
+
+## Shades (2026-11-18)
+
+`ecoregions.geojson` also carries `shade` (0–4), written by
+`scripts/shade_ecoregions.py`: a greedy coloring of the graph of same-biome
+ecoregions that border each other (within 0.01°), so that two neighboring
+ecoregions of one biome never get the same step of the biome's color. The
+script rewrites the file in place and needs `shapely`; rerun it whenever the
+boundaries are rebuilt.

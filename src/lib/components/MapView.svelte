@@ -32,65 +32,63 @@
   const SCHEMES: RegionScheme[] = ['biome', 'ecoregion'];
   const ATTRIBUTION = 'Regions: Olson et al. 2001, WWF';
 
-  /** Ecoregions take their biome's color, shifted in lightness per ecoregion so neighbors separate. */
-  function shade(hex: string, id: string): string {
-    const t = ((Number(id) * 2654435761) % 1000) / 1000 - 0.5; // stable, in [-0.5, 0.5)
-    const k = 1 + 0.36 * t;
-    const c = [1, 3, 5].map((i) => Math.min(255, Math.round(parseInt(hex.slice(i, i + 2), 16) * k)));
-    return `rgb(${c.join(',')})`;
+  /** Mix a hex color toward white (t > 0) or black (t < 0). */
+  function mix(hex: string, t: number): string {
+    const c = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+    const m = c.map((v) => Math.round(t >= 0 ? v + (255 - v) * t : v * (1 + t)));
+    return `rgb(${m.join(',')})`;
   }
+  // Steps of a biome's color for its ecoregions. `shade` in the boundary file
+  // (scripts/shade_ecoregions.py) guarantees that two ecoregions of the same
+  // biome that share a border never get the same step.
+  const SHADES = [0, 0.3, -0.22, 0.52, -0.38];
 
   type Feature = { properties: Record<string, unknown> };
+  const byBiome: Record<string, string[]> = {};
+
   async function fetchRegions(scheme: RegionScheme) {
     const res = await fetch(asset(`/regions/${scheme}s.geojson` as Parameters<typeof asset>[0]));
     const fc = await res.json();
     for (const f of fc.features as Feature[]) {
       const p = f.properties;
-      p.color = scheme === 'biome' ? BIOME_COLORS[Number(p.id) - 1] : shade(BIOME_COLORS[Number(p.biome) - 1], String(p.id));
-      if (scheme === 'ecoregion') p.biomeName = BIOMES[Number(p.biome) - 1];
+      const base = BIOME_COLORS[Number(scheme === 'biome' ? p.id : p.biome) - 1];
+      p.fill = scheme === 'biome' ? base : mix(base, SHADES[Number(p.shade ?? 0) % SHADES.length]);
+      p.line = mix(base, -0.35);
+      if (scheme === 'ecoregion') {
+        p.biomeName = BIOMES[Number(p.biome) - 1];
+        (byBiome[String(p.biome)] ??= []).push(String(p.id));
+      }
     }
     return fc;
   }
 
   /**
-   * Each region layer is drawn as discrete colored shapes. One feature is one
-   * region, however many separate patches it has, so hovering or selecting it
-   * lights every patch at once; the rest fade. `focus-<scheme>` is the hovered
-   * region, or else the selected one.
+   * Each region is drawn in its own color: a light fill and a thin border.
+   * Hovering, selecting or pointing at it in the legend darkens the fill and
+   * thickens the border. One feature is one region however many patches it
+   * has, so every patch responds together. All of this runs on feature state,
+   * which restyles without re-tiling the source.
    */
+  const active: ExpressionSpecification = ['any',
+    ['boolean', ['feature-state', 'hover'], false],
+    ['boolean', ['feature-state', 'sel'], false],
+    ['boolean', ['feature-state', 'legend'], false]];
+
   function addRegionLayers(m: MlMap, scheme: RegionScheme) {
-    // A biome hovered in the legend lights every ecoregion of that biome.
-    const focus: ExpressionSpecification = ['global-state', `focus-${scheme}`];
-    const focusBiome: ExpressionSpecification = ['global-state', `focus-${scheme}-biome`];
-    const none: ExpressionSpecification = ['all', ['==', focus, ''], ['==', focusBiome, '']];
-    const isFocus: ExpressionSpecification =
-      scheme === 'biome' ? ['==', ['get', 'id'], focus] : ['any', ['==', ['get', 'id'], focus], ['==', ['to-string', ['get', 'biome']], focusBiome]];
     m.addLayer({
       id: `${scheme}-fill`, type: 'fill', source: scheme, layout: { visibility: 'none' },
-      paint: {
-        'fill-color': ['get', 'color'],
-        'fill-opacity': ['case', none, 0.9, isFocus, 1, 0.18]
-      }
+      paint: { 'fill-color': ['get', 'fill'], 'fill-opacity': ['case', active, 0.92, 0.5] }
     });
     m.addLayer({
-      id: `${scheme}-line`, type: 'line', source: scheme, layout: { visibility: 'none' },
-      paint: {
-        'line-color': '#ffffff',
-        'line-width': scheme === 'biome' ? 0.6 : 0.4,
-        'line-opacity': 0.8
-      }
+      id: `${scheme}-line`, type: 'line', source: scheme, layout: { visibility: 'none', 'line-join': 'round' },
+      paint: { 'line-color': ['get', 'line'], 'line-width': ['case', active, 2.4, 0.7] }
     });
-    // Outline of the focused region, then pinned regions in their pin color.
+    // Pinned regions keep an outline in their pin color.
     m.addLayer({
-      id: `${scheme}-focus`, type: 'line', source: scheme, layout: { visibility: 'none' },
-      filter: isFocus,
-      paint: { 'line-color': '#18181b', 'line-width': 1.6 }
-    });
-    m.addLayer({
-      id: `${scheme}-pins`, type: 'line', source: scheme, layout: { visibility: 'none' },
+      id: `${scheme}-pins`, type: 'line', source: scheme, layout: { visibility: 'none', 'line-join': 'round' },
       paint: {
         'line-color': ['coalesce', ['feature-state', 'pin'], '#000000'],
-        'line-width': ['case', ['boolean', ['to-boolean', ['feature-state', 'pin']], false], 2.6, 0]
+        'line-width': ['case', ['to-boolean', ['feature-state', 'pin']], 2.6, 0]
       }
     });
   }
@@ -104,13 +102,20 @@
     if (!data) return;
     m.addSource(scheme, { type: 'geojson', data, promoteId: 'id', attribution: ATTRIBUTION });
     addRegionLayers(m, scheme);
-    m.setGlobalStateProperty(`focus-${scheme}`, '');
-    m.setGlobalStateProperty(`focus-${scheme}-biome`, '');
     loaded[scheme] = true;
   }
 
+  /** Set one feature-state key on exactly these features of a source, clearing it elsewhere. */
+  const marked: Record<string, { source: string; id: string }[]> = {};
+  function mark(m: MlMap, key: string, source: string, ids: string[]) {
+    for (const f of marked[key] ?? []) if (m.getSource(f.source)) m.setFeatureState(f, { [key]: false });
+    marked[key] = m.getSource(source) ? ids.map((id) => ({ source, id })) : [];
+    for (const f of marked[key]) m.setFeatureState(f, { [key]: true });
+  }
+
   let styled = $state(false);
-  let hovered = $state<{ scheme: RegionScheme; id: string; text: string; x: number; y: number } | null>(null);
+  let tip = $state<{ text: string; x: number; y: number } | null>(null);
+  let hoverKey = '';
 
   onMount(() => {
     setWorkerUrl(workerUrl);
@@ -122,6 +127,7 @@
       loadScheme(m, 'biome').then(() => {
         if (!m.getSource('biome')) return;
         m.addLayer({ id: 'land', type: 'fill', source: 'biome', paint: { 'fill-color': '#d4d4d8' } }, 'biome-fill');
+        m.setLayoutProperty('land', 'visibility', isRegionLayer(view.layer) ? 'none' : 'visible');
       });
       styled = true;
     });
@@ -143,24 +149,34 @@
       select({ kind: 'cell', lon, lat });
     });
 
+    // Hover touches the map only when the region under the pointer changes.
+    const hover = (scheme: RegionScheme | null, id: string) => {
+      const key = scheme ? `${scheme}:${id}` : '';
+      if (key === hoverKey) return;
+      hoverKey = key;
+      mark(m, 'hover', scheme ?? '', scheme ? [id] : []);
+      m.getCanvas().style.cursor = scheme ? 'pointer' : '';
+    };
     m.on('mousemove', (e: MapMouseEvent) => {
       const layer = view.layer;
       const f = isRegionLayer(layer) && loaded[layer] ? m.queryRenderedFeatures(e.point, { layers: [`${layer}-fill`] })[0] : undefined;
       if (!f || !isRegionLayer(layer)) {
-        hovered = null;
-        m.getCanvas().style.cursor = '';
+        hover(null, '');
+        tip = null;
         return;
       }
       const p = f.properties;
-      hovered = { scheme: layer, id: String(p.id), text: p.biomeName ? `${p.name} · ${p.biomeName}` : String(p.name), x: e.point.x, y: e.point.y };
-      m.getCanvas().style.cursor = 'pointer';
+      hover(layer, String(p.id));
+      tip = { text: p.biomeName ? `${p.name} · ${p.biomeName}` : String(p.name), x: e.point.x, y: e.point.y };
     });
-    m.on('mouseout', () => (hovered = null));
+    m.on('mouseout', () => {
+      hover(null, '');
+      tip = null;
+    });
     return () => m.remove();
   });
 
-  // Load a region layer the first time it is switched on, show only the
-  // active one, and keep the focus on the hovered or else the selected region.
+  // Load a region layer the first time it is switched on, and show only the active one.
   $effect(() => {
     const m = map;
     const layer = view.layer;
@@ -168,17 +184,24 @@
     if (isRegionLayer(layer) && !requested[layer]) loadScheme(m, layer);
     for (const scheme of SCHEMES) {
       if (!loaded[scheme]) continue;
-      for (const part of ['fill', 'line', 'focus', 'pins']) m.setLayoutProperty(`${scheme}-${part}`, 'visibility', layer === scheme ? 'visible' : 'none');
-      const sel = view.selection?.kind === 'region' && view.selection.scheme === scheme ? view.selection.id : '';
-      const hov = hovered?.scheme === scheme ? hovered.id : '';
-      const legend = ui.legendBiome;
-      if (scheme === 'biome') m.setGlobalStateProperty('focus-biome', hov || legend || sel);
-      else {
-        m.setGlobalStateProperty('focus-ecoregion', legend ? '' : hov || sel);
-        m.setGlobalStateProperty('focus-ecoregion-biome', legend);
-      }
+      for (const part of ['fill', 'line', 'pins']) m.setLayoutProperty(`${scheme}-${part}`, 'visibility', layer === scheme ? 'visible' : 'none');
     }
     if (m.getLayer('land')) m.setLayoutProperty('land', 'visibility', isRegionLayer(layer) ? 'none' : 'visible');
+  });
+
+  // The selected region, and the biome under the pointer in the legend (on the
+  // ecoregion layer, every ecoregion of that biome).
+  $effect(() => {
+    const m = map;
+    const sel = view.selection;
+    const layer = view.layer;
+    const legend = ui.legendBiome;
+    if (!m || !loaded.biome && !loaded.ecoregion) return;
+    if (sel?.kind === 'region' && loaded[sel.scheme]) mark(m, 'sel', sel.scheme, [sel.id]);
+    else mark(m, 'sel', '', []);
+    if (legend && layer === 'biome') mark(m, 'legend', 'biome', [legend]);
+    else if (legend && layer === 'ecoregion' && loaded.ecoregion) mark(m, 'legend', 'ecoregion', byBiome[legend] ?? []);
+    else mark(m, 'legend', '', []);
   });
 
   // Pinned regions keep an outline in their pin color.
@@ -217,8 +240,8 @@
 </script>
 
 <div class="map" bind:this={container}></div>
-{#if hovered}
-  <div class="tip" style="left: {hovered.x + 14}px; top: {hovered.y + 14}px">{hovered.text}</div>
+{#if tip}
+  <div class="tip" style="left: {tip.x + 14}px; top: {tip.y + 14}px">{tip.text}</div>
 {/if}
 
 <style>
