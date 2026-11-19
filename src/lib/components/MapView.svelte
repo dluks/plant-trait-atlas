@@ -31,7 +31,7 @@
   const STYLE: StyleSpecification = {
     version: 8,
     sources: {},
-    layers: [{ id: 'ocean', type: 'background', paint: { 'background-color': '#f4f6f8' } }]
+    layers: [{ id: 'ocean', type: 'background', paint: { 'background-color': '#dceaf5' } }]
   };
   const SCHEMES: RegionScheme[] = ['biome', 'ecoregion'];
   const ATTRIBUTION = 'Regions: Olson et al. 2001, WWF';

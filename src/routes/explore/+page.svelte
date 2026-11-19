@@ -53,7 +53,7 @@
   nav a[aria-current='page'] { color: #18181b; font-weight: 600; }
   .embargo { margin-left: auto; font-size: 12px; padding: 6px 10px; border-radius: 999px; background: #fef3c7; color: #78350f; white-space: nowrap; }
   main { flex: 1; display: flex; min-height: 0; }
-  .mapwrap { flex: 1; position: relative; min-width: 0; background: #eef2f5; }
+  .mapwrap { flex: 1; position: relative; min-width: 0; background: #dceaf5; }
   @media (max-width: 760px) {
     header { gap: 12px; padding: 0 12px; }
     .title, nav { display: none; }
